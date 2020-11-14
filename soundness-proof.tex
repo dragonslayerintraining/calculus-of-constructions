@@ -1,0 +1,367 @@
+\documentclass{article}
+\usepackage{amsfonts}
+\usepackage{mathtools}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\usepackage{proof}
+\usepackage{cite}
+\usepackage{hyperref}
+
+\begin{document}
+
+\title{CS292C Final Project proof of type soundness}
+\author{Daniel Zhang}
+\maketitle
+
+\section{Introduction}
+
+For this project I've decided to prove type soundness for and implement the Calculus of Constructions. Extensions of the Calculus of Constructions are used in Coq and Agda \cite{Casinghino10}, so understanding it will help with understanding those systems. I will not be describing extensions such as inductive types or universes.
+
+The Calculus of Constructions is a Pure Type System. Pure Type Systems have a set of sorts. The Calculus of Constructions has three sorts: terms, types and kinds (the type of types).
+
+$\star$ is a constant of sort kind. Note that it is not the only kind. $\star\rightarrow\star$ is a different kind. This corresponds to the type of a type constructor: a function that takes in a type and outputs a type.
+
+The notation $\lambda x:A.B$ is used both for a function that takes in a term and a function that takes in a type.
+$\Pi x:A.B$ is a dependent product. If $x$ does not occur in $B$, it is the same as $A\rightarrow B$. When $A$ is $\star$, it is equivalent to a universal type. \cite{Jones97}
+
+An example of a term would be $\lambda T:*.(\lambda x:T.x)$. Types include expressions such as $\lambda x:\star.x$ and $\Pi x:\star.x$. An example of a kind would be $\Pi x:\star.\star$.
+
+The Calculus of Constructions is the most powerful system in the Lambda Cube. Both types and terms can depend on types and terms.
+The Calculus of Constructions is known to be strongly-normalizing, but the proof is considered difficult \cite{Casinghino10}.
+
+\section{Syntax}
+
+Expressions are considered equivalent up to $\alpha$-conversion.
+Variables names are assumed to all be distinct (implementation uses de Bruijn indices, so substitution doesn't cause issues).
+
+
+\[k\in \text{Const} \rightarrow \star \mid \square\]
+\[e\in \text{Exp}\rightarrow k\in \text{Const} \mid x\in \text{Variable} \mid A B \mid \lambda x:A.B \mid \Pi x:A.B\]
+This is the syntax for both terms and types.
+
+\[v\in \text{Values}\rightarrow k\in \text{Const} \mid x\in \text{Variable} \mid \lambda x:A.B \mid \Pi x: A. B\]
+where $A,B\in\text{Values}$.
+\section{Semantics}
+
+These rules are from \cite{Casinghino10}, modifed to be deterministic.
+
+\[\infer[(LAM1)]{(\lambda x:A.B)\rightarrow (\lambda x:A'.B)}{A\rightarrow A'}\]
+\[\infer[\text{if $A\in\text{Values}$}(LAM2)]{(\lambda x:A.B)\rightarrow (\lambda x:A.B')}{B\rightarrow B'}\]
+\[\infer[(PI1)]{(\Pi x:A.B)\rightarrow (\Pi x:A'.B)}{A\rightarrow A'}\]
+\[\infer[\text{if $A\in\text{Values}$}(PI2)]{(\Pi x:A.B)\rightarrow (\Pi x:A.B')}{B\rightarrow B'}\]
+\[\infer[\text{if APP3 cannot apply}(APP1)]{A B\rightarrow A' B}{A\rightarrow A'}\]
+\[\infer[\text{if $A\in \text{Values}$ and APP3 cannot apply}(APP2)]{A B\rightarrow A B'}{B\rightarrow B'}\]
+\[\infer[(APP3)]{(\lambda x:A.B) C\rightarrow B[x\mapsto C]}{}\]
+
+\section{Substitution}
+
+\[k[x\mapsto D]=k\]
+\[
+y[x\mapsto D]=
+\begin{cases}
+  D & \text{if $x=y$}\\
+  y & \text{if $x\ne y$}
+\end{cases}
+\]
+\[(A B)[x\mapsto D]=A[x\mapsto D] B[x\mapsto D]\]
+\[(\lambda y:A.B)[x\mapsto D]=\lambda y:A[x\mapsto D].B[x\mapsto D]\]
+\[(\Pi y:A.B)[x\mapsto D]=\Pi y:A[x\mapsto D].B[x\mapsto D]\]
+
+\[(\Gamma,y:B)[x\mapsto D]=\Gamma[x\mapsto D],y:B[x\mapsto D]\]
+
+\section{Typing rules}
+
+\[\infer[(STAR)]{\vdash\star:\square}{}\]
+\[\infer[(VAR)]{\Gamma,x:A\vdash x:A}{\Gamma\vdash A:s}\]
+\[\infer[(WEAK)]{\Gamma,x:A\vdash B:C}{\Gamma\vdash B:C & \Gamma\vdash A:s}\]
+\[\infer[(APP)]{\Gamma\vdash f a:B[x\mapsto a]}{\Gamma\vdash f:(\Pi x:A.B) & \Gamma\vdash a:A}\]
+\[\infer[(LAM)]{\Gamma\vdash(\lambda x:A.b):(\Pi x:A.B)}{\Gamma,x:A\vdash b:B & \Gamma\vdash(\Pi x:A.B):t}\]
+\[\infer[(PI)]{\Gamma\vdash(\Pi x:A.B):t}{\Gamma\vdash A:s & \Gamma,x:A\vdash B:t & s,t\in\{\star,\square\}}\]
+\[\infer[(CONV)]{\Gamma\vdash a:B}{\Gamma\vdash a:A & \Gamma\vdash B:s & A=_\beta B}\]
+
+\[\infer[(=_\beta LAM)]{(\lambda x:A.B)C=_\beta B[x\mapsto C]}{}\]
+and its symmetric transitive closure.
+
+These rules are taken from \cite{Jones97} with some modifications. The notation for substitution was changed to match what was used in this class. The version in the paper had a relation on $s$ and $t$ in rule (PI) to restrict to other type systems in the Lambda Cube. The eight systems of the Lambda Cube correspond to all choices of pairs of valid $(s,t)$ in rule PI, where $(\star,\star)$ must be taken. The Calculus of Constructions allows all pairs of sorts on $\{\star,\square\}$.
+
+\section{Proof of progress}
+
+\begin{lemma}
+  Let $e$ be a value.
+  If $\Gamma\vdash e:\Pi x:A.B$, then $e=(\lambda x:C.D)$.
+\end{lemma}
+
+\begin{proof}
+  Since $e$ is a value, it must either be of the form $\lambda x:C.D$ or $\Pi x:C.D$. Let $T$ the last type before trailing applications of CONV or WEAK: $\Gamma'\vdash e:T$ and $T=_\beta \Pi x.A:B$. If $e=\Pi x:C.D$, then $T\in\{\star,\square\}$ since $PI$ is the only rule that could be applied based on the form of $e$. But since neither of $\star$ or $\square$ is $\beta$-equivalent to $\Pi x:C.D$, this is a contradiction. Therefore, $e=\lambda x:C.D$.
+
+\end{proof}
+  
+\begin{theorem}
+  $(\forall e \in Exp)(\vdash e:\tau)\Rightarrow(e \in Values\vee(\exists e'\in Exp)(e\rightarrow e'))$
+\end{theorem}
+
+\begin{proof}
+  Use structural induction on $e$:
+  
+  Case $e\in Const$: $e\in Values$
+
+  Case $e\in Variable$: A variable can only have a type if it is in the context. Since we are in the empty context, a variable cannot be well-typed. Thus, this case cannot happen.
+
+  Case $e=A B$: 
+  \begin{itemize}
+  \item If $A$ is not a value, then $A\rightarrow A'$ by the inductive hypothesis. $e\rightarrow e'$ where $e'=A' B$ (rule APP1).
+  \item If $A$ is a value but $B$ is not a value, then $B\rightarrow B'$ by the inductive hypothesis. Thus, $e\rightarrow e'$ where $e'=A B'$ (rule APP2).
+  \item If $A$ and $B$ are both values: After removing trailing application of CONV from the typing derivation for $\tau$, we get $A B=\tau'$ where $\tau=_\beta \tau'$. The last rule used in the typing derivation for $\tau'$ is not CONV, so it must be APP. Thus, $A:\Pi x: C.D$. Then by Lemma 1, $A=(\lambda x:\tau.e_3)$, so $e=(\lambda x:\tau.e_3)B$. Finally, $e\rightarrow e'$ where $e'=e_3[x\mapsto B]$ (rule APP3).
+  \end{itemize}
+  
+  Case $e=(\lambda x:A.B)$: If $A$ is not a value, then $A\rightarrow A'$ by the inductive hypothesis. $e\rightarrow e'$ where $e'=(\lambda x:A'.B)$. Otherwise, if $B$ is not a value, then $B\rightarrow B'$ by the inductive hypothesis. $e\rightarrow e'$ where $e'=(\lambda x:A.B')$. If both $A$ and $B$ are values, then $e\in Values$.
+  
+  Case $e=(\Pi x:A.B)$: If $A$ is not a value, then $A\rightarrow A'$ by the inductive hypothesis. $e\rightarrow e'$ where $e'=(\Pi x:A'.B)$. Otherwise, if $B$ is not a value, then $B\rightarrow B'$ by the inductive hypothesis. $e\rightarrow e'$ where $e'=(\Pi x:A.B')$. If both $A$ and $B$ are values, then $e\in Values$.
+
+  This exhausts all the cases, so the theorem is true by induction.
+  
+\end{proof}
+
+\section{Proof of preservation}
+
+Compared to simply-typed lambda calculus, a major differences in the proving the Substitution Lemma is the type of a variable can depend on the value of another variable. This means order of variables in the context matters. Also, we must use the version of substitution that allows substituting arbitrary terms because rule APP requires it.
+
+\begin{lemma}[Substitution Lemma for Terms]
+  If $y$ is fresh in $D$,
+  \[e[x\mapsto D][y\mapsto C[x\mapsto D]]=e[y\mapsto C][x\mapsto D]\]
+\end{lemma}
+\begin{proof}
+  The proof is by induction on the structure of $e$.
+  
+  Case $e=k$: $k[x\mapsto D][y\mapsto C[x\mapsto D]]=k=k[y\mapsto C][x\mapsto D]$, as desired.
+
+  Case $e=A B$:
+  \begin{align*}
+    (A B)[x\mapsto D][y\mapsto C[x\mapsto D]]&=A[x\mapsto D][y\mapsto C[x\mapsto D]]B[x\mapsto D][y\mapsto C[x\mapsto D]]\\
+    &=A[y\mapsto C][x\mapsto D]B[y\mapsto C][x\mapsto D]\\
+    &=(A B)[y\mapsto C][x\mapsto D]
+  \end{align*}
+  Using the inductive hypothesis on $A$ and $B$.
+  
+  Case $e=(\lambda x:A.B)$: identical to $A B$.
+  
+  Case $e=(\Pi x:A.B)$: identical to $A B$.
+
+  Case $e=x$:
+  \begin{align*}
+    x[x\mapsto D][y\mapsto C[x\mapsto D]]&=D[y\mapsto C[x\mapsto D]]\\
+    &=D\\
+    &=x[x\mapsto D]\\
+    &=x[y\mapsto C][x\mapsto D]
+  \end{align*}
+  
+  Case $e=y$ where $y\ne x$:
+  \begin{align*}
+    y[x\mapsto D][y\mapsto C[x\mapsto D]]&=y[y\mapsto C[x\mapsto D]]\\
+    &=C[x\mapsto D]\\
+    &=y[y\mapsto C][x\mapsto D]
+  \end{align*}
+  
+\end{proof}
+
+
+\begin{lemma}[Substitution preserves $\beta$-equivalence]
+  \[\text{If $A=_\beta B$, then $A[x\mapsto D]=_\beta B[x\mapsto D]$}\]
+\end{lemma}
+\begin{proof}
+  It suffices to show that $((\lambda y:A.B)C)[x\mapsto D]=_\beta(B[y\mapsto C])[x\mapsto D]$
+
+  \begin{align*}
+  ((\lambda y:A.B)C)[x\mapsto D]&=((\lambda y:A.B)[x\mapsto D]C[x\mapsto D])\\
+    &=((\lambda y:A[x\mapsto D].B[x\mapsto D])C[x\mapsto D])\\
+    &=_\beta B[x\mapsto D][y\mapsto C[x\mapsto D]]\\
+    &=B[y\mapsto C][x\mapsto D]
+  \end{align*}
+  since $y$ is fresh in $D$ (Substitution Lemma for Terms).
+\end{proof}
+
+
+\begin{lemma}[Substitution Lemma]
+  \[\text{If $\Gamma,x:A,\Delta\vdash B:C$ and $\Gamma\vdash D:A$, then $\Gamma,\Delta[x\mapsto D]\vdash B[x\mapsto D]:C[x\mapsto D]$}\]
+\end{lemma}
+This is Lemma 5.2.1 in \cite{Barendregt92}.
+\begin{proof}
+  Use induction on the length of the derivation of $\Gamma,x:A,\Delta,\vdash B:C$.
+
+  Abbreviate $M[x\mapsto D]$ as $M^*$. Note if $x$ is fresh in $M$, then $M=M^*$.
+
+  Look at the last rule used in the derivation of $\Gamma,x:A,\Delta,\vdash B:C$.
+  
+  Case STAR: This case cannot apply because STAR only applies in the empty context, but the context contains $x$.
+
+  Case WEAK: If $\Delta=<>$, the last rule was
+  \[\infer{\Gamma,x:A\vdash B:C}{\Gamma\vdash B:C & \Gamma\vdash A:s}\]
+  Since $x$ is fresh in $B$ and $C$, $B=B^*$, and $C=C^*$. Thus,
+  \[\Gamma\vdash B^*:C^*\]
+  as desired.
+  On the other hand, if $\Delta=\Delta',y:E$, the last rule was
+  \[\infer{\Gamma,x:A,\Delta',y:E\vdash B:C}{\Gamma,x:A,\Delta'\vdash B:C & \Gamma\vdash E:s}\]
+
+  By the inductive hypothesis, $\Gamma,\Delta'^*\vdash B^*:C^*$. Also, since $x$ is fresh in $E$, $E=E^*$. By rule WEAK,
+
+  \[\infer{\Gamma,\Delta'^*,y:E^*\vdash B^*:C^*}{\Gamma,\Delta'^*\vdash B^*:C^* & \Gamma\vdash E^*:s}\]
+
+  Since $\Delta^*=\Delta'^*,y:E^*$,
+  \[\Gamma,\Delta^*\vdash B^*:C^*\]
+  as desired.
+
+  Case VAR: If $\Delta=<>$, the last rule was
+  \[\infer{\Gamma,x:A\vdash x:A}{\Gamma\vdash A:s}\]
+  Since $\Gamma\vdash D:A$, $x^*=D$, and $A=A^*$,
+  \[\Gamma\vdash x^*:A^*\]
+  as desired.
+  On the other hand, if $\Delta=\Delta',y:E$, the last rule was
+  \[\infer{\Gamma,x:A,\Delta',y:E\vdash y:E}{\Gamma,x:A,\Delta'\vdash E:s}\]
+  By the inductive hypothesis,
+  \[\Gamma,\Delta'^*\vdash E^*,s^*\]
+  Now apply rule VAR:
+  \[\infer{\Gamma,\Delta'^*,y:E^*\vdash y:E^*}{\Gamma,\Delta'^*\vdash E^*,s^*}\]
+  Since $\Delta^*=\Delta'^*,y:E^*$ and $y=y^*$,
+  \[\Gamma,\Delta^*\vdash y^*:E^*\]
+  
+  as desired.
+
+  Case PI: The last rule was
+  \[\infer{\Gamma,x:A,\Delta\vdash(\Pi y:E.F):t}{\Gamma,x:A,\Delta\vdash A:s & \Gamma,x:A,\Delta,y:E\vdash F:t}\]
+  By the inductive hypothesis, $\Gamma,\Delta^*\vdash A^*:s^*$ and $\Gamma,\Delta^*,y:E^*\vdash F^*:t^*$
+  Applying rule PI, we get
+  \[\infer{\Gamma,\Delta^*\vdash (\Pi y:E^*:F^*):t^*}{\Gamma,\Delta^*\vdash A^*:s^* & \Gamma,\Delta^*,y:E^*\vdash F^*:t^*}\]
+  as desired
+
+  Case LAM: The last rule was
+  \[\infer{\Gamma,x:A,\Delta\vdash(\lambda y:E.f):(\Pi y:E.F)}{\Gamma,x:A,\Delta,y:E\vdash f:F & \Gamma,x:A,\Delta\vdash(\Pi y:E.F):t}\]
+  By the inductive hypothesis, $\Gamma,\Delta^*,y:E^*\vdash f^*:F^*$ and $\Gamma,\Delta^*\vdash(\Pi y:E^*.F^*):t^*$
+  Applying rule LAM,
+  \[\infer{\Gamma,\Delta^*\vdash(\lambda y:E^*,f^*):(\Pi y:E^*:F^*)}{\Gamma,\Delta^*,y:E^*\vdash f^*:F^* & \Gamma,\Delta^*\vdash(\Pi y:E^*.F^*):t^*}\]
+  as desired.
+
+  Case CONV: The last rule was
+  \[\infer{\Gamma,x:A,\Delta\vdash e:F}{\Gamma,x:A,\Delta\vdash e:E & \Gamma,x:A,\Delta\vdash F:s & E=_\beta F}\]
+  By the inductive hypothesis, $\Gamma,\Delta^*\vdash e^*:E^*$ and $\Gamma,\Delta^*\vdash F^*:s^*$. Also, $E^*=_\beta F^*$ since substitution preserves $\beta$-equivalence. By rule LAM,
+  \[\infer{\Gamma,\Delta^*\vdash e^*:F^*}{\Gamma,\Delta^*\vdash e^*:E^* & \Gamma,\Delta^*\vdash F^*:s^* & E^*=_\beta F^*}\]
+  
+  This exhausts all the cases, so the lemma is true by induction.
+\end{proof}
+
+
+\begin{theorem}[Preservation]
+  $(\Gamma\vdash A:B)\wedge(A\rightarrow A')\Rightarrow(\Gamma\vdash A':B)$
+\end{theorem}
+
+This is based on Theorem 5.2.15 in \cite{Barendregt92}.
+
+\begin{proof}
+  Because the types of variables can contains other variables, we cannot just prove this by induction. Instead, we need to prove two statements simultaneously by induction on generation of $\Gamma\vdash A:B$:
+  \[(\Gamma\vdash e:\tau)\wedge(e\rightarrow e')\Rightarrow(\Gamma\vdash e':\tau)\]
+  \[(\Gamma\vdash e:\tau)\wedge(\Gamma\rightarrow \Gamma')\Rightarrow(\Gamma'\vdash e:\tau)\]
+  where $\Gamma\rightarrow\Gamma'$ if $\Gamma=x_1:A_1,\ldots x_n:A_n$ and $\Gamma'=x_1:A_1'\ldots x_n:A_n'$ where $A_i\rightarrow A_i'$ for exactly one $i$ and for all $j\ne i$ $A_j=_\beta A_j'$. In other words, the type of exactly one variable in the context takes a step.
+
+  Case STAR: This case cannot occur because neither the context nor the term may take a step.
+
+  Case VAR:
+  
+  \[\infer{\Gamma,x:A\vdash x:A}{\Gamma\vdash A:s}\]
+
+  Since $x$ cannot take a step, we only need to handle $(\Gamma,x:A)\rightarrow(\Gamma,x:A)'$
+  This can happen in two ways:
+  
+  If $\Gamma\rightarrow\Gamma'$: By the inductive hypothesis, $\Gamma'\vdash A:s$. Thus,
+  \[\infer{\Gamma',x:A\vdash x:A}{\Gamma'\vdash A:s}\]
+  as desired.
+  
+  If $A \rightarrow A'$: By the inductive hypothesis, $\Gamma\vdash A':s$. Thus,
+  \[\infer{\Gamma,x:A'\vdash x:A'}{\Gamma\vdash A':s}\]
+  as desired.
+  
+  Case WEAK:
+
+  \[\infer{\Gamma,x:A\vdash B:C}{\Gamma\vdash B:C & \Gamma\vdash A:s}\]
+
+  First, consider the case where the term takes a step: $B\rightarrow B'$.
+  By the inductive hypothesis, $\Gamma\vdash B':C$. By WEAK, $\Gamma,x:A\vdash B':C$, as desired.
+  Now consider if the context takes a step. There are two cases. If $\Gamma\rightarrow\Gamma'$, then by the inductive hypothesis, $\Gamma'\vdash B:C$ and $\Gamma'\vdash A:s$. By WEAK, $\Gamma'\vdash B:C$.
+  If $A\rightarrow A'$, then by the inductive hypothesis, $\Gamma\vdash A':s$. By WEAK, $\Gamma,x:A'\vdash B:C$, as desired.
+  
+  Case APP:
+  \[\infer{\Gamma\vdash f a:B[x\mapsto a]}{\Gamma\vdash f:(\Pi:A.B) & \Gamma\vdash a:A}\]
+
+  If $\Gamma\rightarrow \Gamma'$, by the inductive hypothesis, $\Gamma'\vdash f:(\Pi:A.B)$ and $\Gamma'\vdash a:A$. Thus,
+  \[\Gamma\vdash f a:B[x\mapsto a]\]
+  as desired.
+
+  There are three ways for the term to take a step.
+
+  If $e'=f' a$ where $f\rightarrow f'$ (APP1), then by the inductive hypothesis, $\Gamma\vdash f':(\Pi:A.B)$, so by APP, $\Gamma\vdash f' a:B[x\mapsto a]$, as desired.
+  If $e'=f a'$ where $a\rightarrow a'$ (APP2), then by the inductive hypothesis, $\Gamma\vdash a':A$, so by APP, $\Gamma\vdash f a':B[x\mapsto a']$, as desired.
+
+  If $e'=b[x\mapsto a]$ where $f=(\lambda x:A.b)$ (APP3), then by rules APP and LAM (and possible WEAK and CONV), we have
+
+  \[\infer{\Gamma\vdash(\lambda x:A.b) a:B[x\mapsto a]}{\infer{\Gamma\vdash (\lambda x:A.b):(\Pi x:A.B)}{\infer{\cdots}{\infer{\Delta\vdash (\lambda x:A.b):(\Pi x:A.B)}{\Delta,x:A\vdash b:B & \Delta\vdash (\Pi x:A.B):t}}} & \Gamma\vdash x:A}\]
+
+  We can add back variables to $\Delta$ to get $\Gamma, x:A\vdash b:B$. Also, $\Gamma\vdash a:A$. By the Substitution Lemma. $\Gamma\vdash b[x\mapsto a]:B[x\mapsto a]$, as desired.
+
+  
+  Case LAM: By rules LAM and PI (and possible WEAK and CONV).
+  \[\infer{\Gamma\vdash(\lambda x:A.b):(\Pi x:A.B)}{\Gamma,x:A\vdash b:B & \infer{\Gamma\vdash (\Pi x:A.B):t}{\infer{\cdots}{\infer{\Delta\vdash (\Pi x:A.B):u}{\Delta\vdash A:s & \Delta,x:A\vdash B:u}}}}\]
+
+  There are two ways for the term to take a step. If $e'=(\lambda x:A'.b)$ where $A\rightarrow A'$ (LAM1), then by the inductive hypothesis, $\Gamma,x:A'\vdash b:B$, $\Delta\vdash A':s$ and $\Delta,x:A'\vdash B:t$. Thus,
+    
+  \[\infer{\Gamma\vdash(\lambda x:A'.b):(\Pi x:A'.B)}{\Gamma,x:A'\vdash b:B & \infer{\Gamma\vdash (\Pi x:A'.B):t}{\infer{\cdots}{\infer{\Delta\vdash (\Pi x:A'.B):u}{\Delta\vdash A':s & \Delta,x:A'\vdash B:u}}}}\]
+  as desired.
+
+  If $e'=(\lambda x:A.b')$ where $b\rightarrow b'$ (LAM2), then by the inductive hypothesis, $\Gamma,x:A\vdash b':B$, Thus,
+    
+  \[\infer{\Gamma\vdash(\lambda x:A.b'):(\Pi x:A.B)}{\Gamma,x:A\vdash b':B & \Gamma\vdash (\Pi x:A.B):t}\]
+    as desired.
+
+    If $\Gamma\rightarrow\Gamma'$, by the inductive hypothesis, $\Gamma',x:A\vdash b:B$ and $\Gamma'\vdash (\Pi x:A.B):t$.
+
+    Thus,
+    \[\infer{\Gamma'\vdash(\lambda x:A.b):(\Pi x:A.B)}{\Gamma',x:A\vdash b:B & \Gamma'\vdash (\Pi x:A.B):t}\]
+    as desired.
+
+    Case PI: $e=(\Pi x:A_1.A_2)$.
+  
+  \[\infer{\Gamma\vdash(\Pi x:A_1.A_2):t}{\Gamma\vdash A_1:s & \Gamma,x:A_1\vdash A_2:t}\]
+
+  Suppose $e\rightarrow e'$. This can happen in two ways.
+
+  If $e'=A_1' A_2$ where $A_1\rightarrow A_1'$ (rule PI1): By the inductive hypothesis, $\Gamma\vdash A_1':s$, $\Gamma,x:A_1'\vdash A_2:t$. Thus, by rule PI,
+
+  \[\infer{\Gamma\vdash(\Pi x:A_1'.A_2):t}{\Gamma\vdash A_1':s & \Gamma,x:A_1'\vdash A_2:t}\]
+  as desired.
+
+  If $e'=A_1 A_2'$ where $A_2\rightarrow A_2'$ (rule PI2): By the inductive hypothesis,  $\Gamma,x:A_1\vdash A_2':t$. Thus, by rule PI,
+  \[\infer{\Gamma\vdash(\Pi x:A_1.A_2'):t}{\Gamma\vdash A_1:s & \Gamma,x:A_1\vdash A_2':t}\]
+  as desired.
+
+  Suppose $\Gamma\rightarrow\Gamma'$. By the inductive hypothesis, $\Gamma'\vdash A_1:s$, $\Gamma',x:A_1\vdash A_2:t$. Thus, by rule PI,
+
+  \[\infer{\Gamma'\vdash(\Pi x:A_1.A_2):t}{\Gamma'\vdash A_1:s & \Gamma',x:A_1\vdash A_2:t}\]
+  as desired.
+
+  Case CONV:
+  \[\infer{\Gamma\vdash a:B}{\Gamma\vdash a:A & \Gamma\vdash B:s & A=_\beta B}\]
+
+  Suppose $a\rightarrow a'$.
+  
+  By the inductive hypothesis, $\Gamma\vdash a':A$, so by rule CONV,
+  \[\infer{\Gamma\vdash a':B}{\Gamma\vdash a':A & \Gamma\vdash B:s & A=_\beta B}\]
+  as desired.
+  
+  Suppose $\Gamma\rightarrow\Gamma'$.
+  By the inductive hypothesis, $\Gamma'\vdash a:A$ and $\Gamma'\vdash B:s$, so by rule CONV,
+  \[\infer{\Gamma\vdash a':B}{\Gamma\vdash a':A & \Gamma\vdash B:s & A=_\beta B}\]
+  as desired.
+\end{proof}
+
+
+\bibliography{citations}{}
+\bibliographystyle{plain}
+\end{document}
